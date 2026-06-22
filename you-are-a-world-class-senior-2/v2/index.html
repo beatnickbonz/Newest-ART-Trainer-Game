@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a1014" />
+    <title>Warehouse Flow Commander — RC Operator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="game-shell" aria-label="Warehouse Flow Commander RTS operations trainer">
+      <div id="game"></div>
+      <div id="boot-screen" aria-hidden="true">
+        <div class="boot-mark">
+          <div class="boot-bars"><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="boot-title">WAREHOUSE FLOW COMMANDER</div>
+        <div class="boot-sub">RC OPERATOR TRAINER</div>
+        <div class="boot-progress"><i></i></div>
+        <div class="boot-status">Loading shift systems&hellip;</div>
+      </div>
+    </main>
+
+    <!-- Runtime + libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webfontloader@1.6.28/webfontloader.js"></script>
+
+    <!-- Embedded assets (shared with the original edition) -->
+    <script src="../assets/workerSpritesData.js"></script>
+    <script src="../assets/rcOperatorSpritesData.js"></script>
+    <script src="../assets/iconData.js"></script>
+
+    <!-- Game source (dependency order) -->
+    <script src="js/config.js"></script>
+    <script src="js/save.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/textures.js"></script>
+    <script src="js/sim.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/tutorial.js"></script>
+    <script src="js/scenes.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>
