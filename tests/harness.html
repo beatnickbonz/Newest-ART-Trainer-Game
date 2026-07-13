@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WFC Regression Harness</title>
+  <style>
+    body { background: #0a1014; color: #e6eef2; font: 14px/1.5 Consolas, monospace; padding: 20px; }
+    .pass { color: #6ee7b7; } .fail { color: #fb7185; } .nogold { color: #fde047; }
+    pre { background: #11191e; padding: 12px; overflow: auto; max-height: 40vh; }
+    table { border-collapse: collapse; margin: 12px 0; }
+    td, th { border: 1px solid #33454f; padding: 4px 12px; text-align: left; }
+  </style>
+</head>
+<body>
+  <h2>Warehouse Flow Commander — sim regression harness</h2>
+  <p>Runs every scenario with a seeded RNG and a deterministic scripted bot, then
+     compares state hashes against <code>tests/golden/*.json</code>.
+     The sim contract is frozen — see <code>docs/SIM_CONTRACT.md</code>.</p>
+  <div id="status">Loading…</div>
+  <table id="results"></table>
+  <pre id="dump"></pre>
+
+  <!-- Sound stub: the sim calls Sound.play(); no audio in headless runs. -->
+  <!-- Note: only the FROZEN gameplay config loads here — the sim must never need config.view.js. -->
+  <script>window.Sound = { play() {}, setMuted() {}, muted: false };</script>
+  <script src="../js/config.gameplay.js"></script>
+  <script src="../js/sim.js"></script>
+
+  <script>
+    "use strict";
+    const STEP_MS = 100;         // fixed frame delta
+    const SAMPLE_EVERY = 50;     // sample state every 5s of sim time
+    const SEEDS = { base: 1337 } // per-scenario seed = base + index
+
+    /* FNV-1a 32-bit over a string, hex output. */
+    function fnv1a(str) {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+      return (h >>> 0).toString(16).padStart(8, "0");
+    }
+
+    /* Deterministic scripted operator: exercises every action in the frozen
+     * contract. All decisions derive from sim state + step index only. */
+    function bot(sim, step) {
+      const st = sim.state;
+      const sides = ["primary", "secondary"];
+
+      for (const k of sides) {
+        const side = st.sides[k];
+        if (side.trailerOffer) {
+          if (side.trailerOffer.bluePct < 30) sim.flow.acceptOffer(side);
+          else sim.flow.rejectOffer(side);
+        }
+        if (side.source === "ART" && side.artBacklog <= 0 && side.refillTimer <= 0 && (side.raaBoxes > 0 || side.raaPrep > 0)) {
+          sim.flow.toggleSource(k);
+        } else if (side.source === "RAA" && side.artBacklog > 0 && side.refillTimer <= 0) {
+          sim.flow.toggleSource(k);
+        }
+      }
+
+      // haul every full pallet the RC has room for
+      for (const k of sides) {
+        for (const b of st.sides[k].bases) {
+          if (b.fullPallet && sim.rc.queueRoom() && !sim.rc.baseQueued(b)) sim.rc.requestHaulAt(b);
+        }
+      }
+
+      // exercise partial ship once a minute
+      if (step > 0 && step % 600 === 0) {
+        st.partialArmed = true;
+        outer:
+        for (const k of sides) {
+          for (const b of st.sides[k].bases) {
+            if (b.empty && !b.blocked && !b.fullPallet && b.boxes >= sim.tune.partialMinBoxes && sim.rc.queueRoom() && !sim.rc.baseQueued(b)) {
+              sim.rc.requestHaulAt(b);
+              break outer;
+            }
+          }
+        }
+        st.partialArmed = false;
+      }
+
+      // keep a small RAA buffer prepped on both docks
+      for (const k of sides) {
+        const side = st.sides[k];
+        const max = side.raaStackingLocked ? 1 : sim.tune.raaPrepCapacity;
+        if (side.raaPrep < Math.min(2, max) && sim.rc.queueRoom()) sim.rc.requestRaaPrep(k);
+      }
+
+      if (st.ibt.count >= 6 && !st.ibt.clearing) sim.staging.requestIbt();
+      if (st.staging.lanes.some((l) => l.mixed)) sim.staging.reworkMixedLane();
+      if ((st.emptyStacks.primary.count <= 1 || st.emptyStacks.secondary.count <= 1) && sim.rc.queueRoom()) sim.rc.requestRestock();
+
+      // scripted one-offs: crew reassign + manual GPM
+      if (step === 900) sim.workers.reassign("primary");
+      if (step === 1800) sim.workers.reassign("secondary");
+      if (step === 2400) sim.staging.manualGpm();
+
+      sim.scoring.drain(); // exercise drain(), keep pop list flat
+    }
+
+    function sample(sim, step) {
+      const st = sim.state;
+      return {
+        t: step,
+        flow: Math.round(st.flowHealth * 100) / 100,
+        score: st.score,
+        ibt: st.ibt.count,
+        staged: st.staging.lanes.reduce((s, l) => s + l.pallets.length, 0),
+        line: st.sides.primary.line.length + st.sides.secondary.line.length,
+        hauls: st.stats.hauls,
+        rc: [Math.round(st.rc.x), Math.round(st.rc.y)],
+        wsum: Math.round(sim.workers.workers.reduce((s, w) => s + w.x + w.y, 0)),
+      };
+    }
+
+    function runScenario(sc, index) {
+      const seed = SEEDS.base + index;
+      const sim = new Sim(sc, seed);
+      const samples = [];
+      const maxSteps = Math.ceil(sim.tune.shiftMs / STEP_MS) + 50;
+      let step = 0;
+      while (!sim.state.gameOver && step < maxSteps) {
+        bot(sim, step);
+        sim.update(STEP_MS);
+        step++;
+        if (step % SAMPLE_EVERY === 0) samples.push(sample(sim, step));
+      }
+      const final = sim.evaluate();
+      const body = { samples, final, stats: sim.state.stats };
+      return {
+        scenario: sc.id, seed, stepMs: STEP_MS, steps: step,
+        hash: fnv1a(JSON.stringify(body)),
+        ...body,
+      };
+    }
+
+    async function fetchGolden(id) {
+      try {
+        const r = await fetch(`golden/${id}.json`, { cache: "no-store" });
+        if (!r.ok) return null;
+        return await r.json();
+      } catch { return null; }
+    }
+
+    async function main() {
+      const status = document.getElementById("status");
+      const table = document.getElementById("results");
+      table.innerHTML = "<tr><th>Scenario</th><th>Steps</th><th>Score</th><th>Stars</th><th>Hash</th><th>Golden</th><th>Verdict</th></tr>";
+      const results = [];
+      let allPass = true, missing = 0;
+
+      for (let i = 0; i < SCENARIOS.length; i++) {
+        const sc = SCENARIOS[i];
+        status.textContent = `Running ${sc.id}…`;
+        await new Promise((r) => setTimeout(r, 0));
+        const res = runScenario(sc, i);
+        const golden = await fetchGolden(sc.id);
+        let verdict, cls;
+        if (!golden) { verdict = "NO GOLDEN"; cls = "nogold"; missing++; }
+        else if (golden.hash === res.hash) { verdict = "PASS"; cls = "pass"; }
+        else { verdict = "FAIL"; cls = "fail"; allPass = false; }
+        res.verdict = verdict;
+        res.goldenHash = golden ? golden.hash : null;
+        results.push(res);
+        table.insertAdjacentHTML("beforeend",
+          `<tr><td>${sc.id}</td><td>${res.steps}</td><td>${res.final.score}</td><td>${res.final.stars}</td>` +
+          `<td>${res.hash}</td><td>${golden ? golden.hash : "—"}</td><td class="${cls}">${verdict}</td></tr>`);
+      }
+
+      const summary = missing ? `MISSING ${missing} GOLDEN(S)` : allPass ? "ALL PASS" : "REGRESSION DETECTED";
+      status.textContent = `Done — ${summary}`;
+      window.HARNESS_RESULT = { summary, results };
+      document.getElementById("dump").textContent =
+        results.map((r) => `${r.scenario}: steps=${r.steps} score=${r.final.score} stars=${r.final.stars} hash=${r.hash} ${r.verdict}`).join("\n");
+    }
+
+    window.addEventListener("load", main);
+  </script>
+</body>
+</html>
