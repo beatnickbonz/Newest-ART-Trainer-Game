@@ -1,0 +1,106 @@
+{
+ "dock_doors": {
+  "frames": 5,
+  "frameWidth": 248,
+  "frameHeight": 304,
+  "rows": [
+   5
+  ]
+ },
+ "conveyor": {
+  "frames": 3,
+  "frameWidth": 200,
+  "frameHeight": 174,
+  "rows": [
+   3
+  ]
+ },
+ "pallets": {
+  "frames": 8,
+  "frameWidth": 160,
+  "frameHeight": 174,
+  "rows": [
+   4,
+   4
+  ]
+ },
+ "cartons": {
+  "frames": 4,
+  "frameWidth": 74,
+  "frameHeight": 100,
+  "rows": [
+   4
+  ]
+ },
+ "carton_bands": {
+  "frames": 4,
+  "frameWidth": 74,
+  "frameHeight": 100
+ },
+ "dressing": {
+  "frames": 8,
+  "frameWidth": 156,
+  "frameHeight": 214,
+  "rows": [
+   4,
+   4
+  ]
+ },
+ "worker_A": {
+  "frames": 18,
+  "frameWidth": 100,
+  "frameHeight": 180,
+  "rows": [
+   3,
+   7,
+   3,
+   5
+  ]
+ },
+ "worker_B": {
+  "frames": 18,
+  "frameWidth": 100,
+  "frameHeight": 180,
+  "rows": [
+   3,
+   7,
+   3,
+   5
+  ]
+ },
+ "worker_C": {
+  "frames": 18,
+  "frameWidth": 104,
+  "frameHeight": 180,
+  "rows": [
+   3,
+   7,
+   3,
+   5
+  ]
+ },
+ "worker_D": {
+  "frames": 18,
+  "frameWidth": 104,
+  "frameHeight": 180,
+  "rows": [
+   3,
+   7,
+   3,
+   5
+  ]
+ },
+ "rc_operator": {
+  "frames": 2,
+  "frameWidth": 296,
+  "frameHeight": 194,
+  "rows": [
+   2
+  ]
+ },
+ "floor": {
+  "frames": 1,
+  "frameWidth": 960,
+  "frameHeight": 540
+ }
+}
